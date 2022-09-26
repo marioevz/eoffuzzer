@@ -35,9 +35,23 @@ class InvalidityType(IntFlag):
     TOO_MANY_DATA_SECTIONS  = auto()
     DATA_SECTION_FIRST      = auto()
 
+    MAX_INVALIDITY          = auto()
+
 class Section(object):
+    """
+    Data to be contained by this section.
+    Can be code or any abstract data.
+    """
     data: Optional[bytearray]=None
+    """
+    Size value to be used in the header.
+    If set to None, the header is built with length of the data.
+    """
     size: Optional[int]=None
+    """
+    Name used to reference this container.
+    """
+    name: Optional[str]=None
     kind: int
 
     def __init__(self, kind: int):
@@ -60,11 +74,12 @@ class Section(object):
     Gets the formatted header for this section.
     """ 
     def get_header(self) -> bytearray:
-        if self.size is None:
+        size = self.size
+        if size is None:
             if self.data is None:
-                raise Exception("Attempted to build head without section data")
-            self.size = len(self.data)
-        return self.kind.to_bytes(1, byteorder='big') + self.size.to_bytes(2, byteorder='big')
+                raise Exception("Attempted to build header without section data")
+            size = len(self.data)
+        return self.kind.to_bytes(1, byteorder='big') + size.to_bytes(2, byteorder='big')
 
     """
     Gets the body of the section.
@@ -76,10 +91,19 @@ class Container(object):
     sections: List[Section]
     magic: Optional[int]=None
     version: Optional[int]=None
+    """
+    Extra data to be appended at the end of the container, which will
+    not be considered part of any of the sections.
+    If not None, the container is invalidated for testing purposes.
+    """
     extra: Optional[bytearray]=None
+    valid: bool
+    description: Optional[str]=None
+    seed: Optional[int]=None
 
     def __init__(self):
         self.sections = []
+        self.valid = True
 
     """
     Adds a section to the container.
@@ -122,13 +146,15 @@ class Container(object):
     def build(self) -> bytearray:
         c = bytearray.fromhex("EF")
 
-        if self.magic is None:
-            self.magic = EOF_MAGIC
-        c.append(self.magic)
+        magic = self.magic
+        if magic is None:
+            magic = EOF_MAGIC
+        c.append(magic)
 
-        if self.version is None:
-            self.version = EOF_V1_VERSION_NUMBER
-        c.append(self.version)
+        version = self.version
+        if version is None:
+            version = EOF_V1_VERSION_NUMBER
+        c.append(version)
         
         # Add headers
         for s in self.sections:
@@ -146,6 +172,12 @@ class Container(object):
             c += self.extra
 
         return c
+    
+    """
+    Returns the keccak256 hash of the container.
+    """
+    def keccak256(self) -> bytearray:
+        pass
 
 """
 Generate a container using the specified parameters.
@@ -161,14 +193,25 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
     # 0x EF00 01 01 <code section size> [02 <data section size>] 00 <code section> [<data section>]
 
     c = Container()
+    c.seed = seed
+
+    if inv_type == 0:
+        c.description = "Valid EOF V1 container"
+    else:
+        c.description = "Invalid EOF V1 container"
+        c.valid = False
+    
 
     if InvalidityType.INVALID_MAGIC in inv_type:
         c.magic = random.randint(EOF_MAGIC+1, 0xff)
+        c.description += "\n- Invalid MAGIC={}".format(c.magic)
+        
 
     if InvalidityType.INVALID_VERSION in inv_type:
         c.version = random.randint(EOF_V1_VERSION_NUMBER+1, 0xfe)
         if c.version >= EOF_V1_VERSION_NUMBER:
             c.version += 1
+        c.description += "\n- Invalid VERSION={}".format(c.version)
 
     if not InvalidityType.EMPTY_SECTIONS in inv_type:
         # TODO: Fill Sections
@@ -191,7 +234,10 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
                 new_code_size = random.randint(0, c.remaining_space())
                 cs.data = random.randbytes(new_code_size)
                 c.add_section(cs)
-        
+                c.description += "\n- Invalid due to TOO MANY CODE SECTIONS"
+        else:
+            c.description += "\n- Invalid due to NO CODE SECTION"
+
         if c.remaining_space() > 0 or \
             not data is None or \
             not data_size is None or \
@@ -211,7 +257,11 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
                 new_code_size = random.randint(0, c.remaining_space())
                 ds.data = random.randbytes(new_code_size)
                 c.add_section(ds)
-            
+                c.description += "\n- Invalid due to TOO MANY DATA SECTIONS"
+    else:
+        c.description += "\n- Invalid due to ZERO SECTIONS"
+
+
     
     if len(c.sections) > 0:
         if InvalidityType.DATA_SECTION_FIRST in inv_type:
@@ -223,20 +273,77 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
                 # There is no data section,
                 # change kind of first section to data
                 c.sections[0].kind = EOF_V1_SECTION_KIND_DATA
+            c.description += "\n- Invalid due to DATA SECTION APPEARS FIRST"
 
         if InvalidityType.INVALID_SECTION_KIND in inv_type:
             section_index = random.randint(0, len(c.sections) - 1)
             c.sections[section_index].kind = random.randint(0, 0xfd)
             if c.sections[section_index].kind >= EOF_V1_SECTION_KIND_CODE:
                 c.sections[section_index].kind += 2
-        
+            c.description += "\n- Invalid due to section_kind={}".format(c.sections[section_index].kind)
+
         if InvalidityType.INVALID_SECTION_SIZE in inv_type:
             section_index = random.randint(0, len(c.sections) - 1)
-            c.sections[section_index].size = random.randint(0, 0xfe)
-            if c.sections[section_index].kind >= len(c.sections[section_index].data):
-                c.sections[section_index].kind += 1
+            c.sections[section_index].size = random.randint(0, 0xfffe)
+            if c.sections[section_index].size >= len(c.sections[section_index].data):
+                c.sections[section_index].size += 1
+            c.description += "\n- Invalid due to section_size={}!={}".format(c.sections[section_index].size, len(c.sections[section_index].data))
 
     if InvalidityType.INVALID_TRAILING_BYTES in inv_type:
         c.extra = random.randbytes(2)
-
+        c.description += "\n- Invalid due to trailing bytes={}".format(c.extra)
+    valid_str = 'valid'
+    if not c.valid:
+        valid_str = 'invalid'
+    c.name = 'eofV1_{}_{}'.format(seed, valid_str)
     return c
+
+"""
+Generates a simple legacy initcode to return a bytecode.
+"""
+def generate_legacy_initcode(code: bytearray) -> bytearray:
+    
+    if len(code) >= 2**16:
+        raise Exception("code too long for init code")
+
+    initcode = bytearray()
+
+    # PUSH2 - length - length of the code
+    initcode.append(0x61)
+    initcode += len(code).to_bytes(2, byteorder='big')
+
+    # PUSH2 - offset - length of these opcodes
+    initcode.append(0x61)
+    opcodes_length_position = len(initcode)
+    initcode.append(0x00)
+    initcode.append(0x00)
+
+    # PUSH1 (0x00) - destOffset
+    initcode.append(0x60)
+    initcode.append(0x00)
+
+    # CODECOPY
+    initcode.append(0x39)
+
+    # PUSH2 - length - length of the code
+    initcode.append(0x61)
+    initcode += len(code).to_bytes(2, byteorder='big')
+
+    # PUSH1 (0x00) - offset
+    initcode.append(0x60)
+    initcode.append(0x00)
+
+    # RETURN
+    initcode.append(0xF3)
+
+    # Overwrite opcodes length with current actual length
+    initcode_length = len(initcode).to_bytes(2, byteorder='big')
+    initcode[opcodes_length_position] = initcode_length[0]
+    initcode[opcodes_length_position+1] = initcode_length[1]
+
+    # Finally add the code
+    initcode += code
+    return initcode
+
+def generate_eof_container_initcode(code: bytearray, data: bytearray) -> bytearray:
+    pass

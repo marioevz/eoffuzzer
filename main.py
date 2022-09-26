@@ -4,14 +4,16 @@
 import sys
 import argparse
 import random
-from enum import IntEnum, auto
-from typing import Optional
 
 def getOptions(args=sys.argv[1:]):
     parser = argparse.ArgumentParser(description="Output a fuzzed ")
-    parser.add_argument("-o", "--output")
     parser.add_argument("-s", "--seed", help="Seed used to produce the bytecode. Default=random")
+    parser.add_argument("--codesize", help="Size of the random code section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
+    parser.add_argument("--datasize", help="Size of the random data section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
     parser.add_argument("-v", "--version", help="Version number of the EVM Object Format. Default=1", default=1)
+    parser.add_argument("-i", "--initcode", help="Produce the initcode for the EOF container. Default=No", action='store_true')
+    parser.add_argument("-f", "--filler", help="Produce the test filler in yml format. Default=No", action='store_true')
+    parser.add_argument("--invalidity-type", help="Produce an invalid EOF container. Use -1 to generate a random invalidity type. Default=0.", type=int)
     ## TODO: Add invalidity types as arguments here too
     options = parser.parse_args(args)
     return options
@@ -34,12 +36,32 @@ else:
     opts.seed = int(time() * 1000000)
 
 current_seed = opts.seed
+random.seed(current_seed)
 print("Using seed:", hex(current_seed))
 
 if opts.version == 1:
-    from eof.v1 import generate_container
+    from eof.v1 import generate_container, InvalidityType
 else:
     raise Exception("Invalid version")
 
-c = generate_container(seed=opts.seed)
-print("Generated EOF container: ", c.build().hex())
+if opts.invalidity_type is None:
+    opts.invalidity_type = 0
+elif opts.invalidity_type == -1:
+        opts.invalidity_type = random.randint(1, InvalidityType.MAX_INVALIDITY - 1)
+
+opts.invalidity_type=InvalidityType(opts.invalidity_type)
+
+c = generate_container(seed=opts.seed, code_size=opts.codesize, data_size=opts.datasize, inv_type=opts.invalidity_type)
+
+if not opts.filler:
+    print("Generated EOF container: ", c.build().hex())
+if opts.initcode:
+    from eof.v1 import generate_legacy_initcode
+    initcode = generate_legacy_initcode(c.build())
+    if not opts.filler:
+        print("Generated EOF container legacy initcode: ", initcode.hex())
+if opts.filler:
+    from eof.v1 import generate_legacy_initcode
+    from filler import generate_filler
+    print("Generated Filler: ", generate_filler(c, generate_legacy_initcode))
+    
