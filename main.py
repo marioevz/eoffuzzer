@@ -37,7 +37,6 @@ else:
 
 current_seed = opts.seed
 random.seed(current_seed)
-print("Using seed:", hex(current_seed))
 
 if opts.version == 1:
     from eof.v1 import generate_container, InvalidityType
@@ -47,7 +46,12 @@ else:
 if opts.invalidity_type is None:
     opts.invalidity_type = 0
 elif opts.invalidity_type == -1:
-        opts.invalidity_type = random.randint(1, InvalidityType.MAX_INVALIDITY - 1)
+    # Produce a container with random and multiple types of invalid characteristics
+    opts.invalidity_type = random.randint(1, InvalidityType.MAX_INVALIDITY - 1)
+elif opts.invalidity_type == -2:
+    # Produce a container with a single random invalid characteristic
+    inv_types_count = len(bin(InvalidityType.MAX_INVALIDITY)[3:]) - 1
+    opts.invalidity_type = InvalidityType(2 ** random.randint(0, inv_types_count))
 
 opts.invalidity_type=InvalidityType(opts.invalidity_type)
 
@@ -63,5 +67,5 @@ if opts.initcode:
 if opts.filler:
     from eof.v1 import generate_legacy_initcode
     from filler import generate_filler
-    print("Generated Filler: ", generate_filler(c, generate_legacy_initcode))
+    print(generate_filler(c, generate_legacy_initcode))
     

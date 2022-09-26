@@ -83,4 +83,4 @@ def generate_filler(container: Container, initcodegen: Callable[..., bytearray])
     with open(output_file_name, 'w') as f:
         yaml.dump(filler, f)
 
-    return output_file_name
+    return filler_name
