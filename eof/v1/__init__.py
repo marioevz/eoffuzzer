@@ -291,7 +291,7 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
 
     if InvalidityType.INVALID_TRAILING_BYTES in inv_type:
         c.extra = random.randbytes(2)
-        c.description += "\n- Invalid due to trailing bytes={}".format(c.extra)
+        c.description += "\n- Invalid due to trailing bytes={}".format(c.extra.hex())
     valid_str = 'valid'
     if not c.valid:
         valid_str = 'invalid'
