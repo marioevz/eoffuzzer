@@ -13,6 +13,7 @@ def getOptions(args=sys.argv[1:]):
     parser.add_argument("-v", "--version", help="Version number of the EVM Object Format. Default=1", default=1)
     parser.add_argument("-i", "--initcode", help="Produce the initcode for the EOF container. Default=No", action='store_true')
     parser.add_argument("-f", "--filler", help="Produce the test filler in yml format. Default=No", action='store_true')
+    parser.add_argument("--create-method", help="Filler uses CREATE opcode to create the contract. Default=No", type=str, default='tx')
     parser.add_argument("--invalidity-type", help="Produce an invalid EOF container. Use -1 to generate a random invalidity type. Default=0.", type=int)
     ## TODO: Add invalidity types as arguments here too
     options = parser.parse_args(args)
@@ -67,5 +68,5 @@ if opts.initcode:
 if opts.filler:
     from eof.v1 import generate_legacy_initcode
     from filler import generate_filler
-    print(generate_filler(c, generate_legacy_initcode))
+    print(generate_filler(c, generate_legacy_initcode, opts.create_method))
     

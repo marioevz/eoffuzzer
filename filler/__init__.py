@@ -1,10 +1,23 @@
 from eof.v1 import Container
 from collections.abc import Callable
 import yaml
+import rlp
+from web3 import Web3
+
+w3 = Web3()
 
 sender_sk = "45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8"
 sender_address = "a94f5374fce5edbc8e2a8697c15331677e6ebf0b"
-sender_contract_create = "ec0e71ad0a90ffe1909d27dac207f7680abba42d" # nonce == 1
+sender_nonce = 1
+
+create_address =  "cccccccccccccccccccccccccccccccccccccccc"
+create_address_nonce = 1
+
+create2_address = "dddddddddddddddddddddddddddddddddddddddd"
+create2_address_nonce = 1
+
+sender_contract_created_acc = "ec0e71ad0a90ffe1909d27dac207f7680abba42d" # nonce == 1
+create_contract_created_acc = "0x553e6c30af61e7a3576f31311ea8a620f80d047e" # nonce == 1
 
 default_env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -19,7 +32,29 @@ default_pre = {
     sender_address: {
         "balance": '1000000000000000000',
         "code": '0x',
-        "nonce": '1',
+        "nonce": str(sender_nonce),
+        "storage": {},
+    },
+    create_address: {
+        "balance": '0',
+        "code": ''':yul
+        {
+            calldatacopy(0, 0, calldatasize())
+            pop(create(0, 0, calldatasize()))
+        }
+        ''',
+        "nonce": str(create_address_nonce),
+        "storage": {},
+    },
+    create2_address: {
+        "balance": '0',
+        "code": ''':yul
+        {
+            calldatacopy(0, 0, calldatasize())
+            pop(create2(0, 0, calldatasize(), 0))
+        }
+        ''',
+        "nonce": str(create2_address_nonce),
         "storage": {},
     },
 }
@@ -44,13 +79,46 @@ expect_preset = {
                     "nonce": "2",
                     "storage": {},
                 },
-                sender_contract_create: {}
             },
         }
     
+def get_create_address(addr: str, intnonce: int) -> str:
+    if addr.startswith('0x'):
+        addr = addr[2:]
 
+    nonce = hex(intnonce)[2:]
+
+    if (len(addr) % 2) != 0:
+        addr = '0' + addr
+
+    if (len(nonce) % 2) != 0:
+        nonce = '0' + nonce
+    addr = bytes.fromhex(addr)
+    nonce = bytes.fromhex(nonce)
+
+    if nonce == bytes.fromhex('00'):
+        nonce = ''
+    kec = w3.keccak(hexstr=rlp.encode([addr, nonce]).hex())
+    return kec[12:].hex()[2:]
+
+def get_create2_address(addr: str, salt_int: int, initcode: bytearray) -> str:
+    if addr.startswith('0x'):
+        addr = addr[2:]
+    if (len(addr) % 2) != 0:
+        addr = '0' + addr
     
-def generate_filler(container: Container, initcodegen: Callable[..., bytearray]) -> str:
+    salt = hex(salt_int)[2:]
+    while len(salt) < 64:
+        salt = '0' + salt
+
+    ff = bytes.fromhex('ff')
+    addr = bytes.fromhex(addr)
+    salt = bytes.fromhex(salt)
+    init_kec = w3.keccak(hexstr=initcode.hex())
+    kec = w3.keccak(hexstr=(ff + addr + salt + init_kec).hex())
+    return kec[12:].hex()[2:]
+    
+def generate_filler(container: Container, initcodegen: Callable[..., bytearray], create_method: str='tx') -> str:
     # Generate the init code
     code = container.build()
     initcode = initcodegen(code)
@@ -64,9 +132,20 @@ def generate_filler(container: Container, initcodegen: Callable[..., bytearray])
     else:
         contract_result["shouldnotexist"] = 1
     expect = expect_preset.copy()
-    expect["result"][sender_contract_create] = contract_result
-    
 
+    if create_method=='tx':
+        created_contract = get_create_address(sender_address, sender_nonce)
+
+    elif create_method=='create':
+        created_contract = get_create_address(create_address, create_address_nonce)
+        tx["to"] = "0x" + create_address
+
+    elif create_method=='create2':
+        created_contract = get_create2_address(create2_address, 0, initcode)
+        tx["to"] = "0x" + create2_address
+        
+    expect["result"][created_contract] = contract_result
+    
     filler = dict()
     filler_name = container.name
     filler[filler_name] = dict()

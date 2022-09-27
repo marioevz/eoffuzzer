@@ -1,12 +1,10 @@
 import random
-from enum import IntFlag, auto
-from typing import Optional, List
+from enum import IntEnum, Enum, IntFlag, auto
+from typing import Optional, Union, List
 
 EOF_HEADER_TERMINATOR = 0
 EOF_MAGIC = 0
 EOF_V1_VERSION_NUMBER = 1
-EOF_V1_SECTION_KIND_CODE = 1
-EOF_V1_SECTION_KIND_DATA = 2
 
 # Valid EOF format:
 # magic, version, (section_kind, section_size)+, 0, <section contents>
@@ -37,6 +35,10 @@ class InvalidityType(IntFlag):
 
     MAX_INVALIDITY          = auto()
 
+class SectionKindV1(IntEnum):
+    CODE = 1
+    DATA = 2
+
 class Section(object):
     """
     Data to be contained by this section.
@@ -52,9 +54,9 @@ class Section(object):
     Name used to reference this container.
     """
     name: Optional[str]=None
-    kind: int
+    kind: Union[SectionKindV1, int]
 
-    def __init__(self, kind: int):
+    def __init__(self, kind: Union[SectionKindV1, int]):
         self.kind = kind
 
     """
@@ -86,6 +88,9 @@ class Section(object):
     """ 
     def get_body(self) -> bytearray:
         return self.data
+
+    def __str__(self) -> str:
+        return 'kind={}, len(data)={}'.format(str(self.kind), len(self.data))
 
 class Container(object):
     sections: List[Section]
@@ -130,13 +135,13 @@ class Container(object):
 
     def has_data_section(self) -> bool:
         for s in self.sections:
-            if s.kind == EOF_V1_SECTION_KIND_DATA:
+            if s.kind == SectionKindV1.DATA:
                 return True
         return False
     
     def first_data_section_index(self) -> int:
         for i, s in enumerate(self.sections):
-            if s.kind == EOF_V1_SECTION_KIND_DATA:
+            if s.kind == SectionKindV1.DATA:
                 return i
         return -1
 
@@ -179,6 +184,10 @@ class Container(object):
     def keccak256(self) -> bytearray:
         pass
 
+
+    def __str__(self) -> str:
+        return 'magic={}, sections=[{}]'.format(self.magic, ','.join([str(s) for s in self.sections]))
+
 """
 Generate a container using the specified parameters.
 Generated container will try to stay within the boundaries of
@@ -217,7 +226,7 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
         # TODO: Fill Sections
         if not InvalidityType.NO_CODE_SECTION in inv_type:
             # Insert at least 1 code section
-            cs = Section(EOF_V1_SECTION_KIND_CODE)
+            cs = Section(SectionKindV1.CODE)
             if not code is None:
                 # Parameters provided code to introduce
                 cs.data = code
@@ -230,7 +239,7 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
 
             if InvalidityType.TOO_MANY_CODE_SECTIONS in inv_type:
                 # Insert another code section
-                cs = Section(EOF_V1_SECTION_KIND_CODE)
+                cs = Section(SectionKindV1.CODE)
                 new_code_size = random.randint(0, c.remaining_space())
                 cs.data = random.randbytes(new_code_size)
                 c.add_section(cs)
@@ -242,18 +251,18 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
             not data is None or \
             not data_size is None or \
             InvalidityType.TOO_MANY_DATA_SECTIONS in inv_type:
-            ds = Section(EOF_V1_SECTION_KIND_DATA)
+            ds = Section(SectionKindV1.DATA)
             if not data is None:
                 ds.data = data
             else:
                 if data_size is None:
-                    data_size = random.randint(0, c.remaining_space())
+                    data_size = random.randint(1, c.remaining_space())
                 ds.data = random.randbytes(data_size)
             c.add_section(ds)
             
             if InvalidityType.TOO_MANY_DATA_SECTIONS in inv_type:
                 # Insert another data section
-                ds = Section(EOF_V1_SECTION_KIND_DATA)
+                ds = Section(SectionKindV1.DATA)
                 new_code_size = random.randint(0, c.remaining_space())
                 ds.data = random.randbytes(new_code_size)
                 c.add_section(ds)
@@ -265,20 +274,20 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
     
     if len(c.sections) > 0:
         if InvalidityType.DATA_SECTION_FIRST in inv_type:
-            if c.has_data_section:
+            if c.has_data_section():
                 data_idx = c.first_data_section_index()
                 data_section = c.sections.pop(data_idx)
                 c.sections.insert(0, data_section)
             else:
                 # There is no data section,
                 # change kind of first section to data
-                c.sections[0].kind = EOF_V1_SECTION_KIND_DATA
+                c.sections[0].kind = SectionKindV1.DATA
             c.description += "\n- Invalid due to DATA SECTION APPEARS FIRST"
 
         if InvalidityType.INVALID_SECTION_KIND in inv_type:
             section_index = random.randint(0, len(c.sections) - 1)
             c.sections[section_index].kind = random.randint(0, 0xfd)
-            if c.sections[section_index].kind >= EOF_V1_SECTION_KIND_CODE:
+            if c.sections[section_index].kind >= SectionKindV1.CODE.value:
                 c.sections[section_index].kind += 2
             c.description += "\n- Invalid due to section_kind={}".format(c.sections[section_index].kind)
 
@@ -295,7 +304,7 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
     valid_str = 'valid'
     if not c.valid:
         valid_str = 'invalid'
-    c.name = 'eofV1_{}_{}'.format(seed, valid_str)
+    c.name = 'eofV1_{}_{}'.format(hex(seed)[2:], valid_str)
     return c
 
 """
