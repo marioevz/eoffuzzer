@@ -5,3 +5,5 @@ __pycache__/
 
 # Virtual environment
 venv/
+lib/
+include/
