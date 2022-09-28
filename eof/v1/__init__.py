@@ -111,6 +111,19 @@ class Container(object):
         self.valid = True
 
     """
+    Override to get the byte length of the full container
+    """
+    def __len__(self):
+        l = 2  # EOF Magic 0xEF00
+        l += 1 # EOF Version 0x01
+        l += 3 * len(self.sections) # kind + size of each section
+        l += 1 # Section Headers Terminator 0x00
+        for s in self.sections:
+            if s.data:
+                l += len(s.data)
+        return l
+
+    """
     Adds a section to the container.
     """ 
     def add_section(self, section: Section):
@@ -354,5 +367,58 @@ def generate_legacy_initcode(code: bytearray) -> bytearray:
     initcode += code
     return initcode
 
-def generate_eof_container_initcode(code: bytearray, data: bytearray) -> bytearray:
-    pass
+"""
+Generates a EOF V1 initcode containing the inialization code and the
+output bytecode as a data section.
+"""
+def generate_eof_container_initcode(code: bytearray) -> bytearray:
+    if len(code) >= 2**16:
+        raise Exception("code too long for init code")
+
+    c = Container()
+
+    cs = Section(SectionKindV1.CODE)
+    ds = Section(SectionKindV1.DATA)
+    c.add_section(cs)
+    c.add_section(ds)
+
+    # Build the init code
+    cs.data = bytearray()
+
+    # PUSH2 - length - length of the code
+    cs.data.append(0x61)
+    cs.data += len(code).to_bytes(2, byteorder='big')
+
+    # PUSH2 - offset - length of these opcodes
+    cs.data.append(0x61)
+    opcodes_length_position = len(cs.data)
+    cs.data.append(0x00)
+    cs.data.append(0x00)
+
+    # PUSH1 (0x00) - destOffset
+    cs.data.append(0x60)
+    cs.data.append(0x00)
+
+    # CODECOPY
+    cs.data.append(0x39)
+
+    # PUSH2 - length - length of the code
+    cs.data.append(0x61)
+    cs.data += len(code).to_bytes(2, byteorder='big')
+
+    # PUSH1 (0x00) - offset
+    cs.data.append(0x60)
+    cs.data.append(0x00)
+
+    # RETURN
+    cs.data.append(0xF3)
+
+    # Overwrite opcodes length with current actual length
+    initcode_length = len(c).to_bytes(2, byteorder='big')
+    cs.data[opcodes_length_position] = initcode_length[0]
+    cs.data[opcodes_length_position+1] = initcode_length[1]
+
+    # Finally add the code to the data section
+    ds.data = code
+
+    return c.build()

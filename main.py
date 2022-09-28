@@ -11,7 +11,8 @@ def getOptions(args=sys.argv[1:]):
     parser.add_argument("--codesize", help="Size of the random code section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
     parser.add_argument("--datasize", help="Size of the random data section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
     parser.add_argument("-v", "--version", help="Version number of the EVM Object Format. Default=1", default=1)
-    parser.add_argument("-i", "--initcode", help="Produce the initcode for the EOF container. Default=No", action='store_true')
+    parser.add_argument("-i", "--initcode", help="Produce legacy initcode for the EOF container. Default=No", action='store_true')
+    parser.add_argument("--eof-initcode", help="Produce EOF initcode for the EOF container. Default=No", action='store_true')
     parser.add_argument("-f", "--filler", help="Produce the test filler in yml format. Default=No", action='store_true')
     parser.add_argument("--create-method", help="Filler uses CREATE opcode to create the contract. Default=No", type=str, default='tx')
     parser.add_argument("--invalidity-type", help="Produce an invalid EOF container. Use -1 to generate a random invalidity type. Default=0.", type=int)
@@ -58,15 +59,25 @@ opts.invalidity_type=InvalidityType(opts.invalidity_type)
 
 c = generate_container(seed=opts.seed, code_size=opts.codesize, data_size=opts.datasize, inv_type=opts.invalidity_type)
 
-if not opts.filler:
-    print("Generated EOF container: ", c.build().hex())
-if opts.initcode:
-    from eof.v1 import generate_legacy_initcode
-    initcode = generate_legacy_initcode(c.build())
-    if not opts.filler:
-        print("Generated EOF container legacy initcode: ", initcode.hex())
+
 if opts.filler:
-    from eof.v1 import generate_legacy_initcode
     from filler import generate_filler
-    print(generate_filler(c, generate_legacy_initcode, opts.create_method))
-    
+    initcode_f = None
+    if opts.eof_initcode:
+        from eof.v1 import generate_legacy_initcode
+        initcode_f = generate_legacy_initcode
+    else:
+        from eof.v1 import generate_eof_container_initcode
+        initcode_f = generate_eof_container_initcode
+    print(generate_filler(c, initcode_f, opts.create_method))
+else:
+    print("Generated EOF container: ", c.build().hex())
+    if opts.initcode or opts.eof_initcode:
+        if opts.eof_initcode:
+            from eof.v1 import generate_eof_container_initcode
+            initcode = generate_eof_container_initcode(c.build())
+            print("Generated EOF container EOF V1 initcode: ", initcode.hex())
+        else:
+            from eof.v1 import generate_legacy_initcode
+            initcode = generate_legacy_initcode(c.build())
+            print("Generated EOF container legacy initcode: ", initcode.hex())
