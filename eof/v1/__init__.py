@@ -1,5 +1,5 @@
 import random
-from enum import IntEnum, Enum, IntFlag, auto
+from enum import IntEnum, IntFlag, auto
 from typing import Optional, Union, List
 
 EOF_HEADER_TERMINATOR = 0

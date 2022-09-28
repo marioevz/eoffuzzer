@@ -6,15 +6,15 @@ import argparse
 import random
 
 def getOptions(args=sys.argv[1:]):
-    parser = argparse.ArgumentParser(description="Output a fuzzed ")
-    parser.add_argument("-s", "--seed", help="Seed used to produce the bytecode. Default=random")
+    parser = argparse.ArgumentParser(description="Output a fuzzed EOF container with or without an initcode (EOF/Legacy)")
+    parser.add_argument("-s", "--seed", help="Hex seed used to produce the container. Default=random")
     parser.add_argument("--codesize", help="Size of the random code section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
     parser.add_argument("--datasize", help="Size of the random data section's data. Default=random([1,MAX_CODE_SIZE])", type=int)
     parser.add_argument("-v", "--version", help="Version number of the EVM Object Format. Default=1", default=1)
     parser.add_argument("-i", "--initcode", help="Produce legacy initcode for the EOF container. Default=No", action='store_true')
     parser.add_argument("--eof-initcode", help="Produce EOF initcode for the EOF container. Default=No", action='store_true')
     parser.add_argument("-f", "--filler", help="Produce the test filler in yml format. Default=No", action='store_true')
-    parser.add_argument("--create-method", help="Filler uses CREATE opcode to create the contract. Default=No", type=str, default='tx')
+    parser.add_argument("--create-method", help="Specify how the filler should create the contract (tx, create or create2). Default=tx", type=str, default='tx')
     parser.add_argument("--invalidity-type", help="Produce an invalid EOF container. Use -1 to generate a random invalidity type. Default=0.", type=int)
     ## TODO: Add invalidity types as arguments here too
     options = parser.parse_args(args)

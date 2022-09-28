@@ -143,6 +143,8 @@ def generate_filler(container: Container, initcodegen: Callable[..., bytearray],
     elif create_method=='create2':
         created_contract = get_create2_address(create2_address, 0, initcode)
         tx["to"] = "0x" + create2_address
+    else:
+        raise Exception("invalid create method: {}".format(create_method))
         
     expect["result"][created_contract] = contract_result
     
