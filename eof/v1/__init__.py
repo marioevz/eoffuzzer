@@ -1,6 +1,7 @@
 import random
 from enum import IntEnum, IntFlag, auto
 from typing import Optional, Union, List
+from pyevmasm.evmasm import disassemble
 
 EOF_HEADER_TERMINATOR = 0
 EOF_MAGIC = 0
@@ -90,7 +91,11 @@ class Section(object):
         return self.data
 
     def __str__(self) -> str:
-        return 'kind={}, len(data)={}'.format(str(self.kind), len(self.data))
+        s = 'KIND:{}, len(DATA):{}'.format(str(self.kind), len(self.data))
+        if self.kind == SectionKindV1.CODE:
+            s += ", CODE:\n"
+            s += disassemble(self.data)
+        return s
 
 class Container(object):
     sections: List[Section]
@@ -199,7 +204,14 @@ class Container(object):
 
 
     def __str__(self) -> str:
-        return 'magic={}, sections=[{}]'.format(self.magic, ','.join([str(s) for s in self.sections]))
+        magic = self.magic
+        if magic is None:
+            magic = EOF_MAGIC
+        txt = 'MAGIC: {}\n'.format(magic)
+        for i, s in enumerate(self.sections):
+            txt += "==========\nSECTION {}:\n".format(i)
+            txt += str(s)
+        return txt
 
 """
 Generate a container using the specified parameters.
