@@ -197,6 +197,53 @@ class Container(object):
         return c
     
     """
+    Parse an EOF V1 bytearray or hex string and returns a container.
+    Raises exception in case of a badly formatted bytearray.
+    """
+    @classmethod
+    def parse(cls, input: Union[bytearray, str]):
+        if type(input) is str:
+            if input.startswith("0x"):
+                input = input[2:]
+            input = bytearray.fromhex(input)
+        if not input:
+            raise Exception("invalid format")
+        c = cls()
+        if input[0:3] != bytearray.fromhex("ef0001"):
+            raise Exception("invalid format")
+        input = input[3:]
+        # Parse sections
+        while input and input[0] != 0:
+            if len(input) < 3:
+                raise Exception("invalid format")
+            s = Section(input.pop(0))
+            s.size = int.from_bytes(input[:2], 'big')
+            input = input[2:]
+            c.add_section(s)
+        if not input or len(c.sections) == 0:
+            raise Exception("invalid format")
+        input.pop(0)
+        for s in c.sections:
+            if len(input) < s.size:
+                raise Exception("invalid format")
+            s.data = input[:s.size]
+            input = input[s.size:]
+        if len(input) > 0:
+            raise Exception("invalid format")
+        return c
+    """
+    Checks whether magic and version bytes match the expected values for this version.
+    """
+    @classmethod
+    def is_version(cls, input: Union[bytearray, str]) -> bool:
+        if type(input) is str:
+            if input.startswith("0x"):
+                input = input[2:]
+            input = bytearray.fromhex(input)
+        if input[0:3] == bytearray.fromhex("ef0001"):
+            return True
+        return False
+    """
     Returns the keccak256 hash of the container.
     """
     def keccak256(self) -> bytearray:
