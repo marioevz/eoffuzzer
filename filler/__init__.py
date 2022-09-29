@@ -16,9 +16,6 @@ create_address_nonce = 1
 create2_address = "dddddddddddddddddddddddddddddddddddddddd"
 create2_address_nonce = 1
 
-sender_contract_created_acc = "ec0e71ad0a90ffe1909d27dac207f7680abba42d" # nonce == 1
-create_contract_created_acc = "0x553e6c30af61e7a3576f31311ea8a620f80d047e" # nonce == 1
-
 default_env = {
     "currentCoinbase": "2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
     "currentDifficulty": "0x20000",
