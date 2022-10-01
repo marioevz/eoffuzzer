@@ -1,6 +1,6 @@
 import random
 from enum import IntEnum, IntFlag, auto
-from typing import Optional, Union, List
+from typing import Callable, Optional, Union, List, Dict
 from pyevmasm.evmasm import disassemble
 
 EOF_HEADER_TERMINATOR = 0
@@ -481,3 +481,19 @@ def generate_eof_container_initcode(code: bytearray) -> bytearray:
     ds.data = code
 
     return c.build()
+
+def compile_from_dict(sectionlist: List[Dict[str, str]], compiler: Callable[[str], bytearray]) -> Container:
+    c = Container()
+    for rawsection in sectionlist:
+        if 'code' in rawsection:
+            section = Section(SectionKindV1.CODE)
+            section.data = compiler(rawsection['code'])
+            c.add_section(section)
+        elif 'data' in rawsection:
+            section = Section(SectionKindV1.DATA)
+            h = rawsection['data']
+            if h[:2] == '0x':
+                h = h[2:]
+            section.data = bytearray.fromhex(h)
+            c.add_section(section)
+    return c
