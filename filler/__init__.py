@@ -1,4 +1,4 @@
-from eof.v1 import Container
+from eof import Container
 from collections.abc import Callable
 import yaml
 import rlp
@@ -122,7 +122,7 @@ def generate_filler(container: Container, initcodegen: Callable[..., bytearray],
     tx = init_transaction_template.copy()
     tx["data"].append(":raw 0x" + initcode.hex())
     contract_result = dict()
-    if container.valid:
+    if container.is_valid():
         contract_result["code"] = "0x" + code.hex()
         contract_result["nonce"] = "1"
         contract_result["storage"] = dict()
@@ -146,10 +146,10 @@ def generate_filler(container: Container, initcodegen: Callable[..., bytearray],
     expect["result"][created_contract] = contract_result
     
     filler = dict()
-    filler_name = container.name
+    filler_name = container.get_name()
     filler[filler_name] = dict()
     filler[filler_name]["_info"] = {
-        "comment": "Generated using eoffuzzer, seed {}:\n{}".format(container.seed, container.description)
+        "comment": "Generated using eoffuzzer, seed {}:\n{}".format(container.get_seed(), container.get_description())
     }
     filler[filler_name]["env"] = default_env.copy()
     filler[filler_name]["pre"] = default_pre.copy()

@@ -2,6 +2,7 @@ import random
 from enum import IntEnum, IntFlag, auto
 from typing import Any, Callable, Optional, Union, List, Dict
 from pyevmasm.evmasm import disassemble
+from eof import Container
 
 EOF_HEADER_TERMINATOR = 0
 EOF_MAGIC = 0
@@ -97,7 +98,7 @@ class Section(object):
             s += disassemble(self.data)
         return s
 
-class Container(object):
+class ContainerV1(Container):
     sections: List[Section]
     magic: Optional[int]=None
     version: Optional[int]=None
@@ -108,6 +109,7 @@ class Container(object):
     """
     extra: Optional[bytearray]=None
     valid: bool
+    name: Optional[str]=None
     description: Optional[str]=None
     seed: Optional[int]=None
 
@@ -197,6 +199,30 @@ class Container(object):
         return c
     
     """
+    Returns true if the container is a valid EOF V1 container
+    """
+    def is_valid(self) -> bool:
+        return self.valid
+    
+    """
+    Returns the name of this container
+    """
+    def get_name(self) -> str:
+        return self.name
+    
+    """
+    Returns the description of this container
+    """
+    def get_description(self) -> str:
+        return self.description
+
+    """
+    Returns the seed of this container
+    """
+    def get_seed(self) -> int:
+        return self.seed
+
+    """
     Parse an EOF V1 bytearray or hex string and returns a container.
     Raises exception in case of a badly formatted bytearray.
     """
@@ -266,14 +292,14 @@ Generated container will try to stay within the boundaries of
 `MAX_CODE_SIZE`, unless a specific code is used that by itself
 overflows the limit.
 """
-def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Optional[int]=None, data: Optional[bytearray]=None, data_size: Optional[int]=None, inv_type: Optional[InvalidityType]=InvalidityType(0)) -> Container:
+def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Optional[int]=None, data: Optional[bytearray]=None, data_size: Optional[int]=None, inv_type: Optional[InvalidityType]=InvalidityType(0)) -> ContainerV1:
     # Init randomness for this subroutine
     random.seed(seed)
 
     # Valid EOFV1 containers must have the following format:
     # 0x EF00 01 01 <code section size> [02 <data section size>] 00 <code section> [<data section>]
 
-    c = Container()
+    c = ContainerV1()
     c.seed = seed
 
     if inv_type == 0:
@@ -377,6 +403,7 @@ def generate_container(seed: int, code: Optional[bytearray]=None, code_size: Opt
     if not c.valid:
         valid_str = 'invalid'
     c.name = 'eofV1_{}_{}'.format(hex(seed)[2:], valid_str)
+
     return c
 
 """
@@ -434,7 +461,7 @@ def generate_eof_container_initcode(code: bytearray) -> bytearray:
     if len(code) >= 2**16:
         raise Exception("code too long for init code")
 
-    c = Container()
+    c = ContainerV1()
 
     cs = Section(SectionKindV1.CODE)
     ds = Section(SectionKindV1.DATA)
@@ -482,35 +509,47 @@ def generate_eof_container_initcode(code: bytearray) -> bytearray:
 
     return c.build()
 
-def compile_from_dict(container_dict: Dict[str, Any], compiler: Callable[[str], bytearray]) -> Container:
-    c = Container()
+def compile_v1_from_dict(source_dict: Dict[str, Any], container_compiler: Callable[[Dict[str, Any]], Container], code_compiler: Callable[[str], bytearray]) -> Container:
+    c = ContainerV1()
 
-    if 'sections' in container_dict:
-        sectionlist = container_dict['sections']
+    if 'sections' in source_dict:
+        section_list = source_dict['sections']
 
-        for rawsection in sectionlist:
+        for section_dict in section_list:
             section = None
 
-            if 'code' in rawsection or 'data' in rawsection:
-                if 'code' in rawsection:
+            if 'code' in section_dict or 'data' in section_dict:
+                if 'code' in section_dict:
                     section = Section(SectionKindV1.CODE)
-                    compile_data = rawsection['code']
+                    compile_data = section_dict['code']
                 else:
                     section = Section(SectionKindV1.DATA)
-                    compile_data = rawsection['data']
+                    compile_data = section_dict['data']
                 
                 if compile_data is None:
                     raise Exception("incomplete section")
 
                 if type(compile_data) is str:
                     # Data is compiled as code
-                    section.data = compiler(compile_data)
+                    section.data = code_compiler(compile_data)
                 elif type(compile_data) is dict:
                     # This a sub EOF container
-                    section.data = compile_from_dict(compile_data, compiler).build()
+                    section.data = container_compiler(compile_data).build()
 
             if section is None:
                 continue
             
+            # Mock values to invalidate the section
+            if 'mock-kind' in section_dict:
+                section.kind = section_dict['mock-kind']
+            if 'mock-size' in section_dict:
+                section.size = section_dict['mock-size']
+
             c.add_section(section)
+    
+    # Mock values to invalidate the container
+    if 'mock-version' in source_dict:
+        c.version = source_dict['mock-version']
+    if 'mock-magic' in source_dict:
+        c.magic = source_dict['mock-magic']
     return c

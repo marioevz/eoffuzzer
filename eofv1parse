@@ -18,7 +18,7 @@ import sys
 if len(sys.argv) < 2:
   exit()
 s = sys.argv[1]
-from eof.v1 import Container
-c = Container.parse(s)
+from eof.v1 import ContainerV1
+c = ContainerV1.parse(s)
 print(c)
 EOF
