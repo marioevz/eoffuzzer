@@ -91,6 +91,7 @@ def exec_fuzzer(opts):
 def exec_compiler(opts):
     import yaml
     from yaml import Loader
+    from eof import compile_from_dict
 
     lines = None
     with open(opts.ymlfile) as f:
@@ -101,19 +102,7 @@ def exec_compiler(opts):
 
     l = yaml.load('\n'.join(lines), Loader=Loader)
 
-    version = 1
-    if 'version' in l:
-        version = l['version']
-
-    if version != 1:
-        raise Exception("invalid version")
-
-    from compilers import compile
-    from eof.v1 import compile_from_dict
-
-    c = compile_from_dict(l, compile)
-
-    print('0x' + c.build().hex())
+    print('0x' + compile_from_dict(l).build().hex())
 
 opts = get_options()
 
