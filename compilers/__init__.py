@@ -10,7 +10,10 @@ def compile(s: str) -> bytearray:
     elif s.startswith(RAW_PREFIX):
         from compilers.raw import compile_raw
         return compile_raw(s[len(RAW_PREFIX):])
+    elif s.startswith(SOLIDITY_PREFIX):
+        raise Exception("solidity not yet supported")
+    elif s.startswith(ABI_PREFIX):
+        raise Exception("abi not valid as code")
     else:
-        print("warn: no compiler found", file=sys.stderr)
-        print(s, file=sys.stderr)
-    return bytearray()
+        from compilers.lll import compile_lll
+        return compile_lll(s)
